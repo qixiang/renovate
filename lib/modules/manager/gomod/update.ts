@@ -94,7 +94,40 @@ export function updateDependency({
           `$<depPart>$<divider>${upgrade.newValue}`,
         );
       } else {
-        // Non-pseudo-version digest update
+        // Defensive fallback: Non-pseudo-version digest update
+        //
+        // NOTE: This branch should be unreachable for the gomod manager because:
+        //
+        // 1. WHERE currentDigest IS EXTRACTED:
+        //    - In lib/modules/manager/gomod/line-parser.ts, extractDigest() uses
+        //      pseudoVersionRegex which ONLY matches pseudo-version format:
+        //      /v\d+\.\d+\.\d+-(?:\w+\.)?(?:0\.)?\d{14}-(?<digest>[a-f0-9]{12})/
+        //    - This means currentDigest is ONLY set for pseudo-versions like
+        //      "v0.0.0-20260120122510-4a022ed9999a"
+        //    - Regular semver versions (v1.2.3) do NOT have currentDigest set
+        //
+        // 2. WHEN updateType IS SET TO 'digest':
+        //    a) Special gomod override (lib/workers/repository/process/lookup/index.ts:517):
+        //       - Requires: config.manager === 'gomod'
+        //       - Requires: compareValue?.startsWith('v0.0.0-')  // current is pseudo
+        //       - Requires: update.newValue?.startsWith('v0.0.0-')  // new is pseudo
+        //       - Result: updateType = 'digest' ONLY for pseudo → pseudo updates
+        //
+        //    b) General digest update (lib/workers/repository/process/lookup/index.ts:634):
+        //       - Only triggers if config.currentDigest exists
+        //       - currentDigest only exists for pseudo-versions (see #1 above)
+        //       - Result: updateType = 'digest' ONLY when currentDigest exists
+        //
+        // 3. CONCLUSION:
+        //    - For gomod: updateType === 'digest' implies the version is a pseudo-version
+        //    - Therefore: upgrade.newValue ALWAYS starts with 'v0.0.0-'
+        //    - Therefore: This else branch is never reached
+        //
+        // 4. WHY WE KEEP THIS BRANCH:
+        //    - Defensive programming: handles unexpected edge cases
+        //    - Preserves original behavior if assumptions change in the future
+        //    - Makes the code's intent explicit and self-documenting
+        //
         const newDigestRightSized = upgrade.newDigest!.substring(
           0,
           upgrade.currentDigest!.length,
