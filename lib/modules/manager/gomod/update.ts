@@ -80,22 +80,38 @@ export function updateDependency({
     }
     let newLine: string;
     if (upgrade.updateType === 'digest') {
-      const newDigestRightSized = upgrade.newDigest!.substring(
-        0,
-        upgrade.currentDigest!.length,
-      );
-      if (lineToChange.includes(newDigestRightSized)) {
-        return fileContent;
+      // For Go pseudo-versions (v0.0.0-timestamp-digest), we need to write
+      // the full pseudo-version, not just the digest portion
+      if (upgrade.newValue?.startsWith('v0.0.0-')) {
+        // This is a pseudo-version update, use the full newValue
+        logger.debug(
+          { depName: currentName, lineToChange, newValue: upgrade.newValue },
+          'gomod: updating pseudo-version digest',
+        );
+        newLine = lineToChange.replace(
+          // TODO: can be undefined? (#22198)
+          updateLineExp!,
+          `$<depPart>$<divider>${upgrade.newValue}`,
+        );
+      } else {
+        // Non-pseudo-version digest update
+        const newDigestRightSized = upgrade.newDigest!.substring(
+          0,
+          upgrade.currentDigest!.length,
+        );
+        if (lineToChange.includes(newDigestRightSized)) {
+          return fileContent;
+        }
+        logger.debug(
+          { depName: currentName, lineToChange, newDigestRightSized },
+          'gomod: need to update digest',
+        );
+        newLine = lineToChange.replace(
+          // TODO: can be undefined? (#22198)
+          updateLineExp!,
+          `$<depPart>$<divider>${newDigestRightSized}`,
+        );
       }
-      logger.debug(
-        { depName: currentName, lineToChange, newDigestRightSized },
-        'gomod: need to update digest',
-      );
-      newLine = lineToChange.replace(
-        // TODO: can be undefined? (#22198)
-        updateLineExp!,
-        `$<depPart>$<divider>${newDigestRightSized}`,
-      );
     } else {
       newLine = lineToChange.replace(
         // TODO: can be undefined? (#22198)
